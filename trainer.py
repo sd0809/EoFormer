@@ -32,15 +32,13 @@ def train(model, optimizer, loss_fn, data_loader, device):
     n_ctr = 0
     n_loss = 0
     for step, batch_data in enumerate(data_loader):
-        # if step == 1:
-        #     break
-        optimizer.zero_grad() # 梯度清零
+        optimizer.zero_grad()
         images, labels = batch_data['image'], batch_data['label']
-        images = images.to(device) # float32
+        images = images.to(device)
         labels = labels.to(device, dtype=torch.float32)
         with autocast(enabled=True):
             probs = model(images) # shape: [bs, n_classes, 24, 256, 256]
-            loss = loss_fn(probs, labels) # 分类损失函数
+            loss = loss_fn(probs, labels)
 
         # loss.backward()
         # optimizer.step()
@@ -187,120 +185,6 @@ def test(model, model_inferer, data_loader, saver0, saver1, device='cuda'):
         hausdorff_tc = n_hausdorff_tc/n_ctr
         hausdorff_et = n_hausdorff_et/n_ctr_et
     return (dice_wt + dice_tc + dice_et)/3, dice_wt, dice_tc, dice_et, (hausdorff_wt + hausdorff_tc + hausdorff_et)/3, hausdorff_wt, hausdorff_tc, hausdorff_et
-
-
-
-def evaluate_tiantan(args, model, model_inferer, loss_fn, data_loader, device='cuda'):
-    
-    model.eval()
-    with torch.no_grad():
-        n_ctr = 0
-        n_ctr_et = 0
-        n_loss = 0
-        n_dice_wt = 0
-        n_dice_et = 0
-        n_hausdorff_wt = 0
-        n_hausdorff_et = 0
-        for step, batch_data in enumerate(data_loader):
-            # if step == 1:
-            #     break
-            images, labels = batch_data['image'], batch_data['label']
-            images = images.to(device)
-            labels = labels.to(device, dtype=torch.float32)
-            with autocast(enabled=True):
-                probs = model_inferer(images)
-                loss = loss_fn(probs, labels) # 分类损失函数
-            n_loss += loss.item()
-            
-            probs_sigmoid = post_sigmoid(probs)
-            pred_masks = (probs_sigmoid >= 0.5).to(device, dtype=torch.float32)
-            
-            dice , hausdorff = calculate_metric(pred_masks, labels)
-            
-            n_dice_wt += dice[0].item()
-            n_dice_et += dice[1].item()
-
-            n_hausdorff_wt += hausdorff[0].item()
-            n_hausdorff_et += hausdorff[1].item()
-            
-            if hausdorff[1].item() > 1e-3:
-                n_ctr_et += 1
-            elif hausdorff[1].item() == 0.0 and dice[1].item() == 1.0:
-                n_ctr_et += 1
-            else:
-                n_ctr_et += 0
-            n_ctr += 1
-            
-            dice_wt = n_dice_wt/n_ctr
-            dice_et = n_dice_et/n_ctr_et
-            hausdorff_wt = n_hausdorff_wt/n_ctr
-            hausdorff_et = n_hausdorff_et/n_ctr_et
-
-    return n_loss/n_ctr, (dice_wt + dice_et)/2, dice_wt, dice_et, (hausdorff_wt + hausdorff_et)/2, hausdorff_wt, hausdorff_et
-
-
-def test_tiantan(model, model_inferer, data_loader, saver0, saver1, device='cuda'):
-    
-    model.eval()
-    with torch.no_grad():
-        n_ctr = 0
-        n_ctr_et = 0
-        n_dice_wt = 0
-        n_dice_et = 0
-        n_hausdorff_wt = 0
-        n_hausdorff_et = 0
-        for step, batch_data in enumerate(data_loader):
-            images, labels, IDs = batch_data['image'], batch_data['label'], batch_data['ID']
-            images = images.to(device)
-            labels = labels.to(device, dtype=torch.float32)
-            
-            with autocast(enabled=True):
-                probs = model_inferer(images)
-            
-            probs_sigmoid = post_sigmoid(probs)
-            pred_masks = (probs_sigmoid >= 0.5).to(device, dtype=torch.float32)
-            
-            label = labels[0, 0].cpu().numpy()
-            # label[np.where(labels[0, 1] == 1)] = 1
-            label[np.where(labels[0, 1] == 1)] = 2
-            # label[np.where(labels[0, 2] == 1)] = 3
-
-            seg_img = pred_masks[0, 0].cpu().numpy()
-            # seg_img[np.where(pred_masks[0, 1] == 1)] = 1
-            seg_img[np.where(pred_masks[0, 1] == 1)] = 2
-            # seg_img[np.where(pred_masks[0, 2] == 1)] = 3
-            print(IDs[0])
-            saver0(label)
-            saver1(seg_img)
-            
-            dice , hausdorff = calculate_metric(pred_masks, labels)
-            
-            print('dice:')
-            print('wt:', dice[0].item())
-            print('et:', dice[1].item())
-            print('hausdorff:')
-            print('wt:', hausdorff[0].item())
-            print('et:', hausdorff[1].item())
-            
-            n_dice_wt += dice[0].item()
-            n_dice_et += dice[1].item()
-
-            n_hausdorff_wt += hausdorff[0].item()
-            n_hausdorff_et += hausdorff[1].item()
-            
-            if hausdorff[1].item() > 1e-3:
-                n_ctr_et += 1
-            elif hausdorff[1].item() == 0.0 and dice[1].item() == 1.0:
-                n_ctr_et += 1
-            else:
-                n_ctr_et += 0
-            n_ctr += 1
-        
-        dice_wt = n_dice_wt/n_ctr
-        dice_et = n_dice_et/n_ctr_et
-        hausdorff_wt = n_hausdorff_wt/n_ctr
-        hausdorff_et = n_hausdorff_et/n_ctr_et
-    return (dice_wt + dice_et)/2, dice_wt, dice_et, (hausdorff_wt + hausdorff_et)/2, hausdorff_wt, hausdorff_et
 
 
 def inference(model, model_inferer, data_loader, saver, device='cuda'):
