@@ -1,11 +1,9 @@
 from functools import partial
-import time
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from timm.models.layers import trunc_normal_, DropPath
+from timm.models.layers import DropPath
 from timm.models.registry import register_model
-from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.models.layers.helpers import to_2tuple
 
 from models.EoM import EoS, EoL
@@ -13,9 +11,6 @@ from models.unet import UnetrUpBlock_light, UpBlock_light
 
 
 class Downsampling(nn.Module):
-    """
-    Downsampling implemented by a layer of convolution.
-    """
     def __init__(self, in_channels, out_channels, 
         kernel_size, stride=1, padding=0, 
         pre_norm=None, post_norm=None, pre_permute=False):
@@ -37,8 +32,6 @@ class Downsampling(nn.Module):
         return x
 
 class LayerNormGeneral(nn.Module):
-    r""" General layerNorm for different situations
-    """
     def __init__(self, affine_shape=None, normalized_dim=(-1, ), scale=True, # normalized_dim = -1 代表对最后一个维度即 channel, 每一个token做归一化，使得数据均值为0方差为1
         bias=True, eps=1e-5):
         super().__init__()
@@ -60,9 +53,6 @@ class LayerNormGeneral(nn.Module):
         return x
 
 class Scale(nn.Module):
-    """
-    Scale vector by element multiplications.
-    """
     def __init__(self, dim, init_value=1.0, trainable=True):
         super().__init__()
         self.scale = nn.Parameter(init_value * torch.ones(dim), requires_grad=trainable)
@@ -71,9 +61,6 @@ class Scale(nn.Module):
         return x * self.scale
 
 class SquaredReLU(nn.Module):
-    """
-        Squared ReLU: https://arxiv.org/abs/2109.08668
-    """
     def __init__(self, inplace=False):
         super().__init__()
         self.relu = nn.ReLU(inplace=inplace)
@@ -81,9 +68,6 @@ class SquaredReLU(nn.Module):
         return torch.square(self.relu(x))
 
 class StarReLU(nn.Module):
-    """
-    StarReLU: s * relu(x) ** 2 + b
-    """
     def __init__(self, scale_value=1.0, bias_value=0.0,
         scale_learnable=True, bias_learnable=True, 
         mode=None, inplace=False):
@@ -98,10 +82,6 @@ class StarReLU(nn.Module):
         return self.scale * self.relu(x)**2 + self.bias
 
 class Pooling(nn.Module):
-    """
-    Implementation of pooling for PoolFormer: https://arxiv.org/abs/2111.11418
-    Modfiled for [B, H, W, D, C] input
-    """
     def __init__(self, pool_size=3, **kwargs):
         super().__init__()
         self.pool = nn.AvgPool3d(
@@ -115,10 +95,6 @@ class Pooling(nn.Module):
 
 
 class Attention(nn.Module):
-    """
-    Vanilla self-attention from Transformer: https://arxiv.org/abs/1706.03762.
-    Modified from timm.
-    """
     def __init__(self, dim, head_dim=32, num_heads=None, qkv_bias=False,
         attn_drop=0., proj_drop=0., proj_bias=False, **kwargs):
         super().__init__()
@@ -155,17 +131,6 @@ class Attention(nn.Module):
 
     
 class EfficientAttention(nn.Module):
-    """
-    input  -> x:[B, C, H, W, D]
-    output ->   [B, C, H, W, D]
-    in_channels:    int -> Embedding Dimension
-    key_channels:   int -> Key Embedding Dimension,   Best: (in_channels)
-    value_channels: int -> Value Embedding Dimension, Best: (in_channels or in_channels//2)
-    head_count:     int -> It divides the embedding dimension by the head_count and process each part individually
-    Conv2D # of Params:  ((k_h * k_w * C_in) + 1) * C_out)
-    """
-
-    # def __init__(self, in_channels, key_channels, value_channels, head_count=1, **kwargs):
     def __init__(self, dim, head_count=1, **kwargs):
         super().__init__()
         self.in_channels = dim
@@ -207,9 +172,6 @@ class EfficientAttention(nn.Module):
 
 
 class SepConv(nn.Module):
-    r"""
-    Inverted separable convolution from MobileNetV2: https://arxiv.org/abs/1801.04381.
-    """
     def __init__(self, dim, expansion_ratio=2,
         act1_layer=StarReLU, act2_layer=nn.Identity, 
         bias=False, kernel_size=3, padding=1,
@@ -235,9 +197,6 @@ class SepConv(nn.Module):
         return x
 
 class Mlp(nn.Module):
-    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
-    Mostly copied from timm.
-    """
     def __init__(self, dim, mlp_ratio=4, out_features=None, act_layer=StarReLU, drop=0., bias=False, **kwargs):
         super().__init__()
         in_features = dim
@@ -259,37 +218,7 @@ class Mlp(nn.Module):
         x = self.drop2(x)
         return x
 
-class LearnedPositionalEncoding(nn.Module):
-    def __init__(self, length, dim):
-        super(LearnedPositionalEncoding, self).__init__()
-
-        self.position_embeddings = nn.Parameter(torch.zeros(1, length, length, length, dim))
-        
-    def forward(self, x):
-
-        position_embeddings = self.position_embeddings
-        return x + position_embeddings
-    
-class SepConvPositionalEncoding(nn.Module):
-    def __init__(self, dim):
-        super(SepConvPositionalEncoding, self).__init__()
-
-        self.position_embeddings = SepConv(dim=dim)
-        
-    def forward(self, x):
-
-        position_embeddings = self.position_embeddings(x)
-        return x + position_embeddings
-
-
-r"""
-downsampling (stem) for the first stage is a layer of conv with k7, s4 and p2
-downsampling (stem) for the last 3 stages is a layer of conv with k3, s2 and p1
-DOWNSAMPLE_LAYERS_FOUR_STAGES format: [Downsampling, Downsampling, Downsampling, Downsampling]
-use `partial` to specify some arguments
-"""
 DOWNSAMPLE_LAYERS_FOUR_STAGES = [partial(Downsampling,
-            # kernel_size=7, stride=4, padding=2,
             kernel_size=3, stride=2, padding=1,
             post_norm=partial(LayerNormGeneral, bias=False, eps=1e-6)
             )] + \
@@ -298,26 +227,17 @@ DOWNSAMPLE_LAYERS_FOUR_STAGES = [partial(Downsampling,
                 pre_norm=partial(LayerNormGeneral, bias=False, eps=1e-6), pre_permute=True
             )]*3
 
-class MetaFormerBlock(nn.Module):
-    """
-    Implementation of one MetaFormer block.
-    """
+class Block(nn.Module):
     def __init__(self, dim,
                  token_mixer=nn.Identity,
                  mlp=Mlp,
                  norm_layer=nn.LayerNorm,
                  drop=0., drop_path=0.,
-                 layer_scale_init_value=None, res_scale_init_value=None, position_embedding=None,
+                 layer_scale_init_value=None, res_scale_init_value=None,
                  scale_trainable=True, 
                  ):
 
         super().__init__()
-        
-        if position_embedding:
-            self.position_embedding = LearnedPositionalEncoding(length=16, dim=dim)
-            # self.position_embedding = SepConvPositionalEncoding(dim=dim) # depthwise conv
-        else:
-            self.position_embedding = None
         
         self.norm1 = norm_layer(dim)
         self.token_mixer = token_mixer(dim=dim, drop=drop, act_type='prelu', with_idt=True, head_count=dim//32)
@@ -359,28 +279,7 @@ class MetaFormerBlock(nn.Module):
         return x
 
 
-class MetaFormerEncoder(nn.Module):
-    r""" MetaFormer
-        A PyTorch impl of : `MetaFormer Baselines for Vision`  -
-          https://arxiv.org/pdf/2210.XXXXX.pdf
-    Args:
-        in_chans (int): Number of input image channels. Default: 3
-        num_classes (int): Number of classes for classification head. Default: 1000
-        depths (list or tuple): Number of blocks at each stage. Default: [2, 2, 6, 2]
-        dims (int): Feature dimension at each stage. Default: [64, 128, 320, 512]
-        downsample_layers: (list or tuple): Downsampling layers before each stage.
-        token_mixers (list, tuple or token_fcn): Token mixer for each stage. Default: nn.Identity.
-        mlps (list, tuple or mlp_fcn): Mlp for each stage. Default: Mlp.
-        norm_layers (list, tuple or norm_fcn): Norm layers for each stage. Default: partial(LayerNormGeneral, eps=1e-6, bias=False).
-        drop_path_rate (float): Stochastic depth rate. Default: 0.
-        head_dropout (float): dropout for MLP classifier. Default: 0.
-        layer_scale_init_values (list, tuple, float or None): Init value for Layer Scale. Default: None.
-            None means not use the layer scale. Form: https://arxiv.org/abs/2103.17239.
-        res_scale_init_values (list, tuple, float or None): Init value for Layer Scale. Default: [None, None, 1.0, 1.0].
-            None means not use the layer scale. From: https://arxiv.org/abs/2110.09456.
-        output_norm: norm before classifier head. Default: partial(nn.LayerNorm, eps=1e-6).
-        head_fn: classification head. Default: nn.Linear.
-    """
+class Encoder(nn.Module):
     def __init__(self, in_chans=4,
                  depths=[2, 2, 2, 2],
                  dims=[32, 64, 128, 256],
@@ -399,7 +298,7 @@ class MetaFormerEncoder(nn.Module):
         super().__init__()
 
         if not isinstance(depths, (list, tuple)):
-            depths = [depths] # it means the model has only one stage
+            depths = [depths]
         if not isinstance(dims, (list, tuple)):
             dims = [dims]
 
@@ -429,11 +328,11 @@ class MetaFormerEncoder(nn.Module):
         if not isinstance(res_scale_init_values, (list, tuple)):
             res_scale_init_values = [res_scale_init_values] * num_stage
 
-        self.stages = nn.ModuleList() # each stage consists of multiple metaformer blocks
+        self.stages = nn.ModuleList()
         cur = 0
         for i in range(num_stage):
             stage = nn.Sequential(
-                *[MetaFormerBlock(dim=dims[i],
+                *[Block(dim=dims[i],
                 token_mixer=token_mixers[i],
                 mlp=mlps[i],
                 norm_layer=norm_layers[i],
@@ -456,10 +355,7 @@ class MetaFormerEncoder(nn.Module):
         for i in range(self.num_stage):
             x = self.downsample_layers[i](x)
             x = self.stages[i](x)
-            # print(f'after stage {i} shape: {x.shape}')
-            # print(' - - -'*10)
             intmd_output[i] = x.permute(0, 4, 1, 2, 3).contiguous() # (B, H, W, D, C) -> (B, C, H, W, D)
-        # return self.norm(x).permute(0, 4, 1, 2, 3), intmd_output
         return intmd_output[3], intmd_output
 
     def forward(self, x):
@@ -467,44 +363,19 @@ class MetaFormerEncoder(nn.Module):
         return x, intmd_output
 
 
-
-''' skip * 3 light ''' 
 UPSAMPLE_LAYERS_FOUR_STAGES = [partial(UnetrUpBlock_light,
             spatial_dims=3,
             kernel_size=3, upsample_kernel_size=2,
             norm_name=("group", {"num_groups": 1}),
-            # norm_name=("instance"),
             )] * 3 + \
             [partial(UpBlock_light,
             spatial_dims=3,
             kernel_size=3, upsample_kernel_size=2,
             norm_name=("group", {"num_groups": 1}),
-            # norm_name=("instance"),
             )]
 
 
-class MetaFormerDecoder(nn.Module):
-    r""" MetaFormer
-        A PyTorch impl of : `MetaFormer Baselines for Vision`  -
-          https://arxiv.org/pdf/2210.XXXXX.pdf
-    Args:
-        in_chans (int): Number of input image channels. Default: 3
-        num_classes (int): Number of classes for classification head. Default: 1000
-        depths (list or tuple): Number of blocks at each stage. Default: [2, 2, 6, 2]
-        dims (int): Feature dimension at each stage. Default: [64, 128, 320, 512]
-        downsample_layers: (list or tuple): Downsampling layers before each stage.
-        token_mixers (list, tuple or token_fcn): Token mixer for each stage. Default: nn.Identity.
-        mlps (list, tuple or mlp_fcn): Mlp for each stage. Default: Mlp.
-        norm_layers (list, tuple or norm_fcn): Norm layers for each stage. Default: partial(LayerNormGeneral, eps=1e-6, bias=False).
-        drop_path_rate (float): Stochastic depth rate. Default: 0.
-        head_dropout (float): dropout for MLP classifier. Default: 0.
-        layer_scale_init_values (list, tuple, float or None): Init value for Layer Scale. Default: None.
-            None means not use the layer scale. Form: https://arxiv.org/abs/2103.17239.
-        res_scale_init_values (list, tuple, float or None): Init value for Layer Scale. Default: [None, None, 1.0, 1.0].
-            None means not use the layer scale. From: https://arxiv.org/abs/2110.09456.
-        output_norm: norm before classifier head. Default: partial(nn.LayerNorm, eps=1e-6).
-        head_fn: classification head. Default: nn.Linear.
-    """
+class Decoder(nn.Module):
     def __init__(self, in_chans=256,
                  depths=[2, 2, 2],
                  dims=[128, 64, 32, 16],
@@ -553,11 +424,11 @@ class MetaFormerDecoder(nn.Module):
         if not isinstance(res_scale_init_values, (list, tuple)):
             res_scale_init_values = [res_scale_init_values] * num_stage
 
-        self.stages = nn.ModuleList() # each stage consists of multiple metaformer blocks
+        self.stages = nn.ModuleList()
         cur = 0
         for i in range(num_stage):
             stage = nn.Sequential(
-                *[MetaFormerBlock(dim=dims[i],
+                *[Block(dim=dims[i],
                 token_mixer=token_mixers[i][j],
                 mlp=mlps[i],
                 norm_layer=norm_layers[i],
@@ -573,24 +444,7 @@ class MetaFormerDecoder(nn.Module):
     @torch.jit.ignore
     def no_weight_decay(self):
         return {'norm'}
-    
-    # ''' skip * 4 '''
-#     def forward_features(self, x0, intmd_output):
-#         x = intmd_output[3]
-#         for i in range(self.num_stage):
-#             x = self.upsample_layers[i](x, intmd_output[2-i]) # (B, C, H, W, D)
-#             x = x.permute(0, 2, 3, 4, 1) # (B, C, H, W, D) -> (B, H, W, D, C)
-#             x = self.stages[i](x)
-#             x = x.permute(0, 4, 1, 2, 3) # (B, H, W, D, C) -> (B, C, H, W, D)
-#         x = self.upsample_layers[-1](x, x0) # (B, C, H, W, D)
-        
-#         return x
 
-#     def forward(self, x0, intmd_output):
-#         out = self.forward_features(x0, intmd_output)
-#         return out
-
-    # ''' skip * 3 '''
     def forward_features(self, intmd_output):
         x = intmd_output[3]
         for i in range(self.num_stage):
@@ -606,12 +460,9 @@ class MetaFormerDecoder(nn.Module):
         return out
 
 
-
-
-# CAFormer
 @register_model
-def EHE_encoder(pretrained=False, **kwargs):
-    model = MetaFormerEncoder(
+def EHE_encoder(**kwargs):
+    model = Encoder(
         depths=[2, 2, 2, 2],
         dims=[32, 64, 128, 256],
         token_mixers=[SepConv, SepConv, EfficientAttention, EfficientAttention],
@@ -621,8 +472,8 @@ def EHE_encoder(pretrained=False, **kwargs):
 
 # ECBFormer
 @register_model
-def EoFormer_decoder(pretrained=False, **kwargs):
-    model = MetaFormerDecoder(
+def EoFormer_decoder(**kwargs):
+    model = Decoder(
         depths=[2, 2, 2],
         dims=[128, 64, 32, 16],
         token_mixers=[[EoS, EoL], [EoS, EoL], [EoS, EoL]],

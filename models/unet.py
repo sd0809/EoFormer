@@ -8,7 +8,6 @@ from typing import Optional, Sequence, Tuple, Union
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock, get_conv_layer
 from monai.networks.layers.utils import get_act_layer, get_norm_layer
 from monai.networks.blocks import UnetOutBlock, UnetBasicBlock, UnetUpBlock
-# from models.ecb import ECB, ECB_sobel, ECB_lap
 
 class UpBlock_light(nn.Module):
     """
