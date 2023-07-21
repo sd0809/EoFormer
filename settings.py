@@ -12,16 +12,10 @@ def parse_opts():
         "--distributed",
         action="store_true",
         help="DDP")
-
-    parser.add_argument(
-        '--hdf5_path',
-        default="/data/sd0809/TianTanData/data_align_3mod.hdf5",
-        type=str,
-        help='Root directory path of data')
     
     parser.add_argument(
         '--json',
-        default="./brats20.json",
+        default="",
         type=str,
         help='Root directory path of data')
     
@@ -31,18 +25,8 @@ def parse_opts():
         type=str,
         help='Root directory path of data')
     
-    # parser.add_argument(
-    #     '--weight_path',
-    #     default="/data/sd0809/Pretrain_Weight/brats/unet.pth",
-    #     type=str)
-    
     parser.add_argument(
         '--dice_model_path',
-        default=None,
-        type=str)
-    
-    parser.add_argument(
-        '--hausdorff_model_path',
         default=None,
         type=str)
 
@@ -50,7 +34,7 @@ def parse_opts():
         '--dataset',
         default="tiantan",
         type=str,
-        help='( tiantan | brats1617 | ...) '
+        help='( tiantan | brats20 | ...) '
     )
 
     parser.add_argument(
@@ -85,21 +69,21 @@ def parse_opts():
         help='start epoch')
     
     parser.add_argument(
-        '--optim',  # 分割任务的输出类别 WT, TC, ET
+        '--optim',
         default= 'adam',
         type=str,
         help='( sgd | adam | ...) '
     )
 
     parser.add_argument(
-        '--lr_scheduler',  # 分割任务的输出类别 WT, TC, ET
+        '--lr_scheduler',
         default= 'LambdaLR',
         type=str,
         help='( LambdaLR | StepLR | ExponentialLR | ReduceLROnPlateau ) '
     )
 
     parser.add_argument(
-        '--loss_function',  # 分割任务的输出类别 WT, TC, ET
+        '--loss_function',
         default= 'Dice',
         type=str,
         help='( CE | Dice | DiceCE | ...) '
@@ -151,12 +135,11 @@ def parse_opts():
         type=int,
         help='Number of total epochs to run')
     
-    # model para
     parser.add_argument(
         '--model',
         default='unet',
         type=str,
-        help='(resnet | unet | swin_unter')
+        help='(eoformer | unet | swin_unter)')
 
     parser.add_argument(
         '--n_seg_classes',
@@ -201,13 +184,22 @@ def parse_opts():
         help='Gpu id lists')
 
     parser.add_argument(
-        '--save_folder', default="/data1/sd0809/output/", type=str, help='path to save model')
+        '--save_folder', 
+        default="", 
+        type=str, 
+        help='path to save model')
     
     parser.add_argument(
-        '--test_seed', default=1, type=int, help='Manually set random seed')
+        '--test_seed', 
+        default=1, 
+        type=int, 
+        help='Manually set random seed')
 
     parser.add_argument(
-        '--manual_seed', default=4294967295, type=int, help='Manually set random seed')
+        '--manual_seed', 
+        default=4294967295, 
+        type=int, 
+        help='Manually set random seed')
 
     args = parser.parse_args()
     

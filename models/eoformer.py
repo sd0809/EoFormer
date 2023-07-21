@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from functools import partial
 from monai.networks.blocks import UnetOutBlock, UnetrBasicBlock, UnetrUpBlock
 
-from models.metaformer import EHE_encoder
-from models.metaformer import EoFormer_decoder
+from models.encoder_and_decoder import EHE_encoder
+from models.encoder_and_decoder import EoFormer_decoder
 from models.unet import UNet_encoder, UNet_decoder
 
 

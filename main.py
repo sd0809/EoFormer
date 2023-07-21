@@ -238,7 +238,6 @@ def main(args):
             tb_writer = SummaryWriter(f'/{args.save_folder}/tb/', comment=f' {model_name}') #tb_path保存tensorboard记录
         
         # model selection
-
         if args.model == 'eoformer':
             model = EoFormer(in_channels=modality_num, out_channels=args.n_seg_classes, drop_path=args.drop_path_rate)
         else:

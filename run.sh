@@ -1,4 +1,3 @@
-# BraTS 20
 for loss_fn in 'DiceCE'
 do
 for lr in 2e-4
@@ -6,12 +5,12 @@ do
 for wd in 1e-5
 do
 
-python -m torch.distributed.run --nproc_per_node=2 main_brats.py \
+python -m torch.distributed.run --nproc_per_node=2 main.py \
 --distributed \
 --data_path BraTS2020 \
 --dataset brats \
 --modality T1_Ax T1_E_Ax T2_Ax T2_Flair_Ax \
---model metaformer \
+--model eoformer \
 --drop_path_rate 0.1 \
 --n_seg_classes 3 \
 --crop_H 128 \
