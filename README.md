@@ -30,9 +30,8 @@ BraTS2020
 | -- BraTS2020_ValidationData
 ```
 
-## Train
-`sh run.sh`
-
+## Train & Test
+`python main.py --data_path <data path> --args ……` or `sh run.sh`
 ## Citation
 ```
 @inproceedings{she2023eoformer,
