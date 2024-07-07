@@ -241,7 +241,7 @@ def main(args):
         if args.model == 'eoformer':
             model = EoFormer(in_channels=modality_num, out_channels=args.n_seg_classes, drop_path=args.drop_path_rate)
         else:
-            print(f"Error: no model {}")
+            print(f"Error: no model {args.model}")
             exit(1)
 
         if args.distributed:
@@ -250,12 +250,12 @@ def main(args):
         else:
             model = nn.DataParallel(model.to(device), device_ids = args.gpu_id)
         
-        if args.distributed:
-            if local_rank==0:
-                print(model)
-        else:
-            print(model)
-        # exit(0)
+        # if args.distributed:
+        #     if local_rank==0:
+        #         print(model)
+        # else:
+        #     print(model)
+
         # 计算参数量
         if args.distributed:
             if local_rank==0:

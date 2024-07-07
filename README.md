@@ -6,7 +6,7 @@ Official PyTorch Implementation of EoFormer
 ![pipeline](./images/main.png)
 ![pipeline](./images/visualize.png)
 
-## Installation
+## Enviroments
 1. Clone the repository
 
 `git clone https://github.com/sd0809/EoFormer.git`
@@ -17,6 +17,17 @@ Official PyTorch Implementation of EoFormer
 conda create -n EoFormer python==3.8
 conda activate EoFormer
 pip install -r requirements.txt
+```
+
+## Data
+Put the BraTS 2020 dataset in `data_path`
+
+You can download BraTS 2020 dataset in [here](https://www.med.upenn.edu/cbica/brats2020/data.html)
+
+```
+BraTS2020
+| -- BraTS2020_TrainingData
+| -- BraTS2020_ValidationData
 ```
 
 ## Train
