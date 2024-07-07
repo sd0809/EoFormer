@@ -45,4 +45,4 @@ BraTS2020
 ```
 
 ## 
-If you find our project useful, please consider star it  : )
+If you find our project useful, please consider starring it  : )
